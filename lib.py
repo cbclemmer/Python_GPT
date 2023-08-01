@@ -8,46 +8,12 @@ import openai
 from util import open_file, save_file
 from types import Message, Conversation
 
-class GptCompletion:
-    def __init__(self, system_prompt: str) -> None:
-        self.system_prompt = system_prompt
-        self.encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
-        self.system_prompt_tokens = len(self.encoding.encode(self.system_prompt))
-        self.total_tokens = 0
-
-    def complete(self, prompt: str, response_tokens: int = 100, config: dict = {}):
-        prompt_tokens = len(self.encoding.encode(prompt))
-        total_tokens = self.system_prompt_tokens + prompt_tokens + response_tokens
-        if total_tokens >= 4096:
-            raise "Chat completion error: too many tokens requested: " + total_tokens
-        defaultConfig = {
-            "model": 'gpt-3.5-turbo',
-            "max_tokens": response_tokens,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": self.system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.5
-        }
-
-        defaultConfig.update(config)
-        res = openai.ChatCompletion.create(**defaultConfig)
-        msg = res.choices[0].message.content.strip()
-        self.total_tokens += res.usage.total_tokens
-        return msg
-
 class GptChat:
     messages: List[Message]
     conversations: List[Conversation]
 
     def __init__(self, system_prompt_file: str) -> None:
-        self.system_prompt = open_file('../prompts/' + system_prompt_file + '.prompt')
+        self.system_prompt = open_file(system_prompt_file)
         self.encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
         self.system_prompt_tokens = len(self.encoding.encode(self.system_prompt))
         self.messages = []
@@ -78,7 +44,7 @@ class GptChat:
             message_tokens += len(self.encoding.encode(m.content))
         return message_tokens
 
-    def send(self, message: str, max_tokens=100) -> str:
+    def send(self, message: str, max_tokens: int = 100, config: dict = { }) -> str:
         message_tokens = self.get_message_tokens()
         message_tokens += len(self.encoding.encode(message))
         print(f"Sending chat with {message_tokens} tokens")
@@ -95,6 +61,7 @@ class GptChat:
             "temperature": 0.5
         }
 
+        defaultConfig.update(config)
         try:
             res = openai.ChatCompletion.create(**defaultConfig)
         except:
@@ -107,3 +74,11 @@ class GptChat:
         self.add_message(msg, "assistant")
         self.total_tokens += res.usage.total_tokens
         return msg
+    
+class GptCompletion(GptChat):
+    def __init__(self, system_prompt: str) -> None:
+        super().__init__(system_prompt)
+
+    def complete(self, prompt: str, max_tokens: int = 100, config: dict = {}):
+        self.reset_chat()
+        self.send(prompt, max_tokens, config)
